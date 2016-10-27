@@ -10,10 +10,10 @@ import (
 
 	"cloud.google.com/go/datastore"
 
-	"github.com/xyproto/cookie"
 	// Database interfaces
 	"github.com/bpermission/backend"
 	"github.com/bpermission/bcookie"
+	"github.com/bpermission/randomstring"
 )
 
 const (
@@ -56,7 +56,7 @@ func NewUserState(filename string, randomseed bool) (*UserState, error) {
 	// This must happen before the random seeding, or
 	// else people will have to log in again after every server restart
 	// Seed the random number generator
-	secret := cookie.RandomCookieFriendlyString(30)
+	secret := randomstring.GenReadable(30)
 	if randomseed {
 		rand.Seed(time.Now().UnixNano())
 	}
@@ -613,11 +613,11 @@ func (state *UserState) SetMinimumConfirmationCodeLength(length int) {
 func (state *UserState) GenerateUniqueConfirmationCode() (string, error) {
 	const maxConfirmationCodeLength = 100 // when are the generated confirmation codes unreasonably long
 	length := minConfirmationCodeLength
-	confirmationCode := cookie.RandomHumanFriendlyString(length)
+	confirmationCode := randomstring.GenReadable(length)
 	for state.AlreadyHasConfirmationCode(confirmationCode) {
 		// Increase the length of the confirmationCode random string every time there is a collision
 		length++
-		confirmationCode = cookie.RandomHumanFriendlyString(length)
+		confirmationCode = randomstring.GenReadable(length)
 		if length > maxConfirmationCodeLength {
 			// This should never happen
 			return confirmationCode, errors.New("Too many generated confirmation codes are not unique!")
