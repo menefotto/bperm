@@ -1,4 +1,5 @@
-// Package permissionbolt provides middleware for keeping track of users, login states and permissions.
+// Package permissionbolt provides middleware for keeping track of users,
+// login states and permissions.
 package bperm
 
 import (
@@ -33,7 +34,7 @@ func New() (*Permissions, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewPermissions(state), nil
+	return NewFromUserState(state), nil
 }
 
 // NewWithConf initializes a Permissions struct with a database filename
@@ -42,16 +43,16 @@ func NewWithConf(filename string) (*Permissions, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewPermissions(state), nil
+	return NewFromUserState(state), nil
 
 }
 
 // NewPermissions initializes a Permissions struct with the given UserState and
 // a few default paths for admin/user/public path prefixes.
-func NewPermissions(state *UserState) *Permissions {
+func NewFromUserState(state *UserState) *Permissions {
 	paths := map[Paths][]string{}
 	paths[aPaths] = []string{"/admin"}
-	paths[uPaths] = []string{"/repo", "/data"}
+	paths[uPaths] = []string{"/profiles", "/data"}
 	paths[pPaths] = []string{
 		"/", "/login", "/register",
 		"/favicon.ico", "/style",
@@ -70,7 +71,8 @@ func (perm *Permissions) SetDenyFunc(f http.HandlerFunc) {
 	perm.denied = f
 }
 
-// DenyFunction returns the currently configured http.HandlerFunc for when permissions are denied
+// DenyFunction returns the currently configured http.HandlerFunc for when
+// permissions are denied
 func (perm *Permissions) GetDenyFunc() http.HandlerFunc {
 	return perm.denied
 }
@@ -96,18 +98,21 @@ func (perm *Permissions) AddPath(valid Paths, prefix string) {
 	perm.paths[valid] = append(perm.paths[valid], prefix)
 }
 
-// SetAdminPath sets all URL path prefixes for pages that are only accessible for logged in administrators
+// SetAdminPath sets all URL path prefixes for pages that are only accessible
+// for logged in administrators
 func (perm *Permissions) SetPath(valid Paths, pathPrefixes []string) {
 	perm.paths[valid] = pathPrefixes
 }
 
 // Rejected checks if a given http request should be rejected
 func (perm *Permissions) Rejected(w http.ResponseWriter, req *http.Request) bool {
-	reject := false
-	path := req.URL.Path // the path of the url that the user wish to visit
+	var (
+		reject = false
+		path   = req.URL.Path // the path of the url that the user wish to visit
+	)
 	// If it's not "/" and set to be public regardless of permissions
 	if !(perm.rootIsPublic && path == "/") {
-		// Reject if it is an admin page and user does not have admin permissions
+		// Reject if it is an admin page and user is not an admin
 		for _, prefix := range perm.paths[aPaths] {
 			if strings.HasPrefix(path, prefix) {
 				if !perm.state.AdminRights(req) {
@@ -117,7 +122,7 @@ func (perm *Permissions) Rejected(w http.ResponseWriter, req *http.Request) bool
 			}
 		}
 		if !reject {
-			// Reject if it's a user page and the user does not have user rights
+			// Reject if it's a user page and the user doesn't have perm
 			for _, prefix := range perm.paths[uPaths] {
 				if strings.HasPrefix(path, prefix) {
 					if !perm.state.UserRights(req) {
