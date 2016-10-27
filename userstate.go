@@ -13,6 +13,7 @@ import (
 	"github.com/xyproto/cookie"
 	// Database interfaces
 	"github.com/bpermission/backend"
+	"github.com/bpermission/bcookie"
 )
 
 const (
@@ -25,10 +26,10 @@ var (
 
 // The UserState struct holds the pointer to the underlying database and a few other settings
 type UserState struct {
-	users             *backend.Datastore // A db structured as an Hash map of users, with several different fields per user ("loggedin", "confirmed", "email" etc)
-	cookieSecret      string             // Secret for storing secure cookies
-	cookieTime        int64              // How long a cookie should last, in seconds
-	passwordAlgorithm string             // The hashing algorithm to utilize default: "bcrypt+" allowed: ("sha256", "bcrypt", "bcrypt+")
+	users             backend.Db // A db or users with different fields ("loggedin", "confirmed") etc
+	cookieSecret      string     // Secret for storing secure cookies
+	cookieTime        int64      // How long a cookie should last, in seconds
+	passwordAlgorithm string     // The hashing algo to utilize default: "bcrypt+" allowed: ("sha256", "bcrypt", "bcrypt+")
 }
 
 // NewUserStateSimple creates a new UserState struct that can be used for managing users.
@@ -48,7 +49,6 @@ func NewUserState(filename string, randomseed bool) (*UserState, error) {
 	log.Println("before opening db")
 	err := db.Open(filename, "Users")
 	if err != nil {
-		log.Println("opening error")
 		return nil, err
 	}
 
@@ -69,7 +69,7 @@ func NewUserState(filename string, randomseed bool) (*UserState, error) {
 }
 
 // Database retrieves the underlying database
-func (state *UserState) Database() *backend.Datastore {
+func (state *UserState) Database() backend.Db {
 	return state.users
 }
 
@@ -137,7 +137,7 @@ func (state *UserState) IsAdmin(username string) bool {
 
 // UsernameCookie retrieves the username that is stored in a cookie in the browser, if available.
 func (state *UserState) UsernameCookie(req *http.Request) (string, error) {
-	username, ok := cookie.SecureCookie(req, "user", state.cookieSecret)
+	username, ok := bcookie.Get(req, "user", state.cookieSecret)
 	if ok && (username != "") {
 		return username, nil
 	}
@@ -155,7 +155,7 @@ func (state *UserState) SetUsernameCookie(w http.ResponseWriter, username string
 	}
 	// Create a cookie that lasts for a while ("timeout" seconds),
 	// this is the equivivalent of a session for a given username.
-	cookie.SetSecureCookiePath(w, "user", username, state.cookieTime, "/", state.cookieSecret)
+	bcookie.SetPath(w, "user", username, state.cookieTime, "/", state.cookieSecret)
 	return nil
 }
 
@@ -165,7 +165,8 @@ func (state *UserState) AllUsernames() ([]string, error) {
 	usernames := []string{}
 
 	ctx := context.Background()
-	client := state.users.Backend()
+	store := state.users.(*backend.Datastore)
+	client := store.Backend()
 
 	_, err := client.GetAll(ctx, datastore.NewQuery("Users").Project("Username"), usernames)
 	if err != nil {
@@ -201,7 +202,8 @@ func (state *UserState) AllUnconfirmedUsernames() ([]string, error) {
 	usernames := []string{}
 
 	ctx := context.Background()
-	client := state.users.Backend()
+	store := state.users.(*backend.Datastore)
+	client := store.Backend()
 
 	_, err := client.GetAll(ctx, datastore.NewQuery("Users").Filter("Confirmed =", "false").Project("Username"), usernames)
 	if err != nil {
@@ -373,7 +375,7 @@ func (state *UserState) SetLoggedOut(username string) error {
 }
 
 // Login is a convenience function for logging a user in and storing the
-// username in a cookie. Returns an error if the cookie could not be set.
+// username in a cookie, returns an error if the cookie could not be set.
 func (state *UserState) Login(w http.ResponseWriter, username string) error {
 	state.SetLoggedIn(username)
 	return state.SetUsernameCookie(w, username)
@@ -382,7 +384,7 @@ func (state *UserState) Login(w http.ResponseWriter, username string) error {
 // ClearCookie tries to clear the user cookie by setting it to be expired.
 // Some browsers *may* be configured to keep cookies even after this.
 func (state *UserState) ClearCookie(w http.ResponseWriter) {
-	cookie.ClearCookie(w, "user", "/")
+	bcookie.Del(w, "user", "/")
 }
 
 // Logout is a convenience function for logging out a user.

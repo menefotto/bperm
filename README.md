@@ -9,6 +9,7 @@ well as the need for them. Userstate file has been greatly simplified. To use
 only a database and not any auxiliary data structure.
 Currently there is only a backend implementation and it's the google-cloud datastore.
 And the package wasn't tested. Still share a lot with the original implementation.
+Added fork of https://github.com/xyproto/cookie.
 
 TODO
 milestones:
