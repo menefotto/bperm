@@ -24,7 +24,7 @@ func main() {
 	//perm.Clear()
 
 	// Get the userstate, used in the handlers below
-	userstate := perm.UserState()
+	userstate := perm.GetUserState()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
 		fmt.Fprintf(w, "Has user bob: %v\n", userstate.HasUser("bob"))
@@ -86,7 +86,7 @@ func main() {
 	})
 
 	// Custom handler for when permissions are denied
-	perm.SetDenyFunction(func(w http.ResponseWriter, req *http.Request) {
+	perm.SetDenyFunc(func(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "Permission denied!", http.StatusForbidden)
 	})
 
