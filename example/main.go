@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/bpermission"
 	"github.com/codegangsta/negroni"
 )
 
@@ -15,7 +14,7 @@ func main() {
 	mux := http.NewServeMux()
 
 	// New permissions middleware
-	perm, err := bpermission.New()
+	perm, err := bperm.New()
 	if err != nil {
 		log.Fatalln(err)
 	}

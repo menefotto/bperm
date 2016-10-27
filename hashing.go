@@ -1,4 +1,4 @@
-package bpermission
+package bperm
 
 import (
 	"crypto/sha256"

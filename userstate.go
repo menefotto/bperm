@@ -1,4 +1,4 @@
-package bpermission
+package bperm
 
 import (
 	"context"
@@ -11,9 +11,9 @@ import (
 	"cloud.google.com/go/datastore"
 
 	// Database interfaces
-	"github.com/bpermission/backend"
-	"github.com/bpermission/bcookie"
-	"github.com/bpermission/randomstring"
+	"github.com/bperm/backend"
+	"github.com/bperm/bcookie"
+	"github.com/bperm/randomstring"
 )
 
 const (
