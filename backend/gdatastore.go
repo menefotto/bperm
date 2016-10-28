@@ -79,6 +79,3 @@ func (d *Datastore) Close() {
 func (d *Datastore) newKey(id string) *datastore.Key {
 	return datastore.NewKey(context.Background(), d.kind, id, 0, nil)
 }
-
-type HashMap struct {
-}
