@@ -25,8 +25,7 @@ type Permissions struct {
 }
 
 const (
-	// Version number. Stable API within major version numbers.
-	Version = 2.0
+	Version = 2.0 // Version number. Stable API within major version numbers.
 )
 
 // New initializes a Permissions struct with all the default settings.
@@ -116,7 +115,7 @@ func (perm *Permissions) Rejected(w http.ResponseWriter, req *http.Request) bool
 		// Reject if it is an admin page and user is not an admin
 		for _, prefix := range perm.paths[aPaths] {
 			if strings.HasPrefix(path, prefix) {
-				if !perm.state.AdminRights(req) {
+				if !perm.state.IsCurrentUserAdmin(req) {
 					reject = true
 					break
 				}
@@ -124,14 +123,9 @@ func (perm *Permissions) Rejected(w http.ResponseWriter, req *http.Request) bool
 		}
 		if !reject {
 			// Reject if it's a user page and the user doesn't have perm
-			for _, prefix := range perm.paths[uPaths] {
-				if strings.HasPrefix(path, prefix) {
-					if !perm.state.UserRights(req) {
-						reject = true
-						break
-					}
-				}
-			}
+			// not needed any longer all users have user rights
+			// TOUGH is the place to put the not confirmed logic
+			// can't view this yet.
 		}
 		if !reject {
 			// Reject if it's not a public page

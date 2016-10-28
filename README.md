@@ -1,4 +1,4 @@
-Better permission of bpermission is a rewrite of project permission2, found at
+Better permission or bperm is a rewrite of project permission2, found at
 https://github.com/xyproto/permissions2 , I wasn't personally satisfied with the
 implementation. So I decided to fork it and rewrite it, I needed it to work with
 any database, the current original project uses a different project for different

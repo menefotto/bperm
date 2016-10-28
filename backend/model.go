@@ -9,4 +9,5 @@ type User struct {
 	ConfirmationCode string
 	Admin            bool
 	Loggedin         bool
+	Active           bool
 }

@@ -1,0 +1,15 @@
+Change:
+	- IsAdmin
+	- IConfirmed
+	- IsLoggedin
+To a single getter
+	- SetLoggedout
+	- SetPassword
+	- SetLoggedin
+	- SetAdminStatus
+	- Logout
+	- MarkConfirmed
+	- RemoveUser /* users should never be deleted just set to deleted/inactive etc..."
+	- RemoveAdminStatus 
+	- RemoveUnconfirmed
+To a single setter

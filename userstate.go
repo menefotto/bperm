@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"cloud.google.com/go/datastore"
-
 	// Database interfaces
 	"github.com/bperm/backend"
 	"github.com/bperm/bcookie"
@@ -18,11 +17,8 @@ import (
 )
 
 const (
-	defaultFilename = "waterandboards-auth"
-)
-
-var (
-	minConfirmationCodeLength = 20 // minimum length of the confirmation code
+	defaultFilename           = "waterandboards-auth"
+	minConfirmationCodeLength = 32 // minimum length of the confirmation code
 )
 
 // The UserState struct holds the pointer to the underlying database and a few other settings
@@ -30,7 +26,7 @@ type UserState struct {
 	users             backend.Db // A db or users with different fields ("loggedin", "confirmed") etc
 	cookieSecret      string     // Secret for storing secure cookies
 	cookieTime        int64      // How long a cookie should last, in seconds
-	passwordAlgorithm string     // The hashing algo to utilize default: "bcrypt+" allowed: ("sha256", "bcrypt", "bcrypt+")
+	passwordAlgorithm string     // Default: "bcrypt+" the only one allowed
 }
 
 // NewUserStateSimple creates a new UserState struct that can be used for managing users.
@@ -79,15 +75,6 @@ func (state *UserState) Close() {
 	state.users.Close()
 }
 
-// UserRights checks if the current user is logged in and has user rights.
-func (state *UserState) UserRights(req *http.Request) bool {
-	username, err := state.UsernameCookie(req)
-	if err != nil {
-		return false
-	}
-	return state.IsLoggedIn(username)
-}
-
 // HasUser checks if the given username exists.
 func (state *UserState) HasUser(username string) bool {
 	_, err := state.users.Get(username)
@@ -98,46 +85,9 @@ func (state *UserState) HasUser(username string) bool {
 	return true
 }
 
-// IsConfirmed checks if a user is confirmed (can be used for "e-mail confirmation").
-// TODO add error reporting
-func (state *UserState) IsConfirmed(username string) bool {
-	user, err := state.users.Get(username)
-	if err != nil {
-		return false
-	}
-	return user.Confirmed
-}
-
-// IsLoggedIn checks if a user is logged in.
-func (state *UserState) IsLoggedIn(username string) bool {
-	user, err := state.users.Get(username)
-	if err != nil {
-		// Returns "no" if the status can not be retrieved
-		return false
-	}
-	return user.Loggedin
-}
-
-// AdminRights checks if the current user is logged in and has administrator rights.
-func (state *UserState) AdminRights(req *http.Request) bool {
-	username, err := state.UsernameCookie(req)
-	if err != nil {
-		return false
-	}
-	return state.IsLoggedIn(username) && state.IsAdmin(username)
-}
-
-// IsAdmin checks if a user is an administrator.
-func (state *UserState) IsAdmin(username string) bool {
-	user, err := state.users.Get(username)
-	if err != nil {
-		return false
-	}
-	return user.Admin
-}
-
 // UsernameCookie retrieves the username that is stored in a cookie in the browser, if available.
-func (state *UserState) UsernameCookie(req *http.Request) (string, error) {
+// TODO make them part of the bcookie package
+func (state *UserState) GetUsernameFromCookie(req *http.Request) (string, error) {
 	username, ok := bcookie.Get(req, "user", state.cookieSecret)
 	if ok && (username != "") {
 		return username, nil
@@ -147,7 +97,7 @@ func (state *UserState) UsernameCookie(req *http.Request) (string, error) {
 
 // SetUsernameCookie stores the given username in a cookie in the browser, if possible.
 // Will return an error if the username is empty or the user does not exist.
-func (state *UserState) SetUsernameCookie(w http.ResponseWriter, username string) error {
+func (state *UserState) SetUsernameIntoCookie(w http.ResponseWriter, username string) error {
 	if username == "" {
 		return errors.New("Can't set cookie for empty username")
 	}
@@ -164,256 +114,8 @@ func (state *UserState) SetUsernameCookie(w http.ResponseWriter, username string
 	return nil
 }
 
-// AllUsernames returns a list of all usernames.
-func (state *UserState) AllUsernames() ([]string, error) {
-	//return state.usernames.GetAll()
-	usernames := []string{}
-
-	ctx := context.Background()
-	store := state.users.(*backend.Datastore)
-	client := store.Backend()
-
-	_, err := client.GetAll(ctx, datastore.NewQuery("Users").Project("Username"), usernames)
-	if err != nil {
-		return nil, err
-	}
-
-	return usernames, nil
-}
-
-// Email returns the email address for the given username.
-func (state *UserState) Email(username string) (string, error) {
-	user, err := state.users.Get(username)
-	if err != nil {
-		return "", err
-	}
-
-	return user.Email, nil
-}
-
-// PasswordHash returns the password hash for the given username.
-func (state *UserState) PasswordHash(username string) (string, error) {
-	user, err := state.users.Get(username)
-	if err != nil {
-		return "", err
-	}
-
-	return user.Password, nil
-}
-
-// AllUnconfirmedUsernames returns a list of all registered users that are not yet confirmed.
-//TODO expose query filter in the interface query filter
-func (state *UserState) AllUnconfirmedUsernames() ([]string, error) {
-	usernames := []string{}
-
-	ctx := context.Background()
-	store := state.users.(*backend.Datastore)
-	client := store.Backend()
-
-	_, err := client.GetAll(ctx, datastore.NewQuery("Users").Filter("Confirmed =", "false").Project("Username"), usernames)
-	if err != nil {
-		return nil, err
-	}
-
-	return usernames, nil
-}
-
-// ConfirmationCode returns the stored confirmation code for a specific user.
-func (state *UserState) ConfirmationCode(username string) (string, error) {
-	user, err := state.users.Get(username)
-	if err != nil {
-		return "", err
-	}
-
-	return user.ConfirmationCode, nil
-}
-
-// AddUnconfirmed adds a user to a list of users that are registered, but not confirmed.
-func (state *UserState) AddUnconfirmed(username, confirmationCode string) error {
-	user, err := state.users.Get(username)
-	if err != nil {
-		return err
-	}
-
-	user.ConfirmationCode = confirmationCode
-	err = state.users.Put(username, user)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// RemoveUnconfirmed removes a user from a list of users that are registered, but not confirmed.
-func (state *UserState) RemoveUnconfirmed(username string) {
-	//has become a nops since there not the data structure any longer
-	return
-}
-
-// MarkConfirmed marks a user as being confirmed.
-func (state *UserState) MarkConfirmed(username string) error {
-	user, err := state.users.Get(username)
-	if err != nil {
-		return err
-	}
-
-	user.Confirmed = true
-	err = state.users.Put(username, user)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// RemoveUser removes a user and the login status for this user.
-func (state *UserState) RemoveUser(username string) error {
-	// Remove additional data as well
-	//state.users.DelKey(username, "loggedin")
-	err := state.users.Del(username)
-	if err != nil {
-		return fmt.Errorf("Failed to logout user %s\n", username)
-	}
-
-	return nil
-}
-
-// SetAdminStatus marks a user as an administrator.
-func (state *UserState) SetAdminStatus(username string) error {
-	user, err := state.users.Get(username)
-	if err != nil {
-		return err
-	}
-
-	user.Admin = true
-	err = state.users.Put(username, user)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// RemoveAdminStatus removes the administrator status from a user.
-func (state *UserState) RemoveAdminStatus(username string) error {
-	user, err := state.users.Get(username)
-	if err != nil {
-		return err
-	}
-
-	user.Admin = false
-	err = state.users.Put(username, user)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// addUserUnchecked creates a user from the username and password hash, does not check for rights.
-func (state *UserState) addUserUnchecked(username, passwdHash, email string) error {
-	// Add the user
-	user := &backend.User{}
-	// Add password and email
-	user.Username = username
-	user.Password = passwdHash
-	user.Email = email
-	user.Loggedin = false
-	user.Confirmed = false
-	user.Admin = false
-	// Addditional fields
-	if err := state.users.Put(email, user); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// AddUser creates a user and hashes the password, does not check for rights.
-// The given data must be valid.
-func (state *UserState) AddUser(username, password, email string) error {
-	user := &backend.User{}
-	// Add password and email
-	user.Username = username
-	user.Password, _ = state.HashPassword(username, password)
-	user.Email = email
-	user.Loggedin = false
-	user.Confirmed = false
-	user.Admin = false
-	// Addditional fields
-
-	err := state.users.Put(username, user)
-	if err != nil {
-		log.Println("Err: while adding user: ", err)
-		return err
-	}
-
-	return nil
-}
-
-// SetLoggedIn marks a user as logged in.
-// Use the Login function instead, unless cookies are not involved.
-func (state *UserState) SetLoggedIn(username string) error {
-	user, err := state.users.Get(username)
-	if err != nil {
-		return err
-	}
-
-	user.Loggedin = true
-	err = state.users.Put(username, user)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// SetLoggedOut marks a user as logged out.
-func (state *UserState) SetLoggedOut(username string) error {
-	user, err := state.users.Get(username)
-	if err != nil {
-		return err
-	}
-
-	user.Loggedin = false
-	err = state.users.Put(username, user)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// Login is a convenience function for logging a user in and storing the
-// username in a cookie, returns an error if the cookie could not be set.
-func (state *UserState) Login(w http.ResponseWriter, username string) error {
-	_ = state.SetLoggedIn(username)
-	return state.SetUsernameCookie(w, username)
-}
-
-// ClearCookie tries to clear the user cookie by setting it to be expired.
-// Some browsers *may* be configured to keep cookies even after this.
-func (state *UserState) ClearCookie(w http.ResponseWriter) {
-	bcookie.Del(w, "user", "/")
-}
-
-// Logout is a convenience function for logging out a user.
-func (state *UserState) Logout(username string) {
-	_ = state.SetLoggedOut(username)
-}
-
-// Username is a convenience function for returning the current username
-// (from the browser cookie), or an empty string.
-func (state *UserState) Username(req *http.Request) string {
-	username, err := state.UsernameCookie(req)
-	if err != nil {
-		return ""
-	}
-	return username
-}
-
 // CookieTimeout returns the current login cookie timeout, in seconds.
-func (state *UserState) CookieTimeout(username string) int64 {
+func (state *UserState) GetCookieTimeout(username string) int64 {
 	return state.cookieTime
 }
 
@@ -423,7 +125,7 @@ func (state *UserState) SetCookieTimeout(cookieTime int64) {
 }
 
 // CookieSecret returns the current cookie secret
-func (state *UserState) CookieSecret() string {
+func (state *UserState) GetCookieSecret() string {
 	return state.cookieSecret
 }
 
@@ -432,30 +134,258 @@ func (state *UserState) SetCookieSecret(cookieSecret string) {
 	state.cookieSecret = cookieSecret
 }
 
-// PasswordAlgo returns the current password hashing algorithm.
-func (state *UserState) PasswordAlgo() string {
-	return state.passwordAlgorithm
+// ClearCookie tries to clear the user cookie by setting it to be expired.
+// Some browsers *may* be configured to keep cookies even after this.
+func (state *UserState) ClearCookie(w http.ResponseWriter) {
+	bcookie.Del(w, "user", "/")
 }
 
-/*SetPasswordAlgo determines which password hashing algorithm should be used.
- *
- * The default value is "bcrypt+".
- *
- * Possible values are:
- *    bcrypt  -> Store and check passwords with the bcrypt hash.
- *    sha256  -> Store and check passwords with the sha256 hash.
- *    bcrypt+ -> Store passwords with bcrypt, but check with both
- *               bcrypt and sha256, for backwards compatibility
- *               with old passwords that has been stored as sha256.
- */
-func (state *UserState) SetPasswordAlgo(algorithm string) error {
-	switch algorithm {
-	case "sha256", "bcrypt", "bcrypt+":
-		state.passwordAlgorithm = algorithm
-	default:
-		return errors.New("Permissions: " + algorithm + " is an unsupported encryption algorithm")
+// UserProperty identifies what filed we want to change from the User
+type UserProperty int
+
+const (
+	Admin UserProperty = iota
+	Confirmed
+	ConfirmationCode
+	Loggedin
+	Password
+	Active
+	Email
+)
+
+func (state *UserState) GetUserStatus(id string, prop UserProperty) (result interface{}, err error) {
+	user := &backend.User{}
+	user, err = state.users.Get(id)
+	if err != nil {
+		return false, err
 	}
+
+	switch {
+	case prop == Admin:
+		result, err = user.Admin, nil
+	case prop == Confirmed:
+		result, err = user.Confirmed, nil
+	case prop == ConfirmationCode:
+		result, err = user.ConfirmationCode, nil
+	case prop == Loggedin:
+		result, err = user.Loggedin, nil
+	case prop == Email:
+		result, err = user.Email, nil
+	default:
+		result, err = false, fmt.Errorf("Property is not gettable or defined\n")
+	}
+
+	return result, err
+}
+
+func (state *UserState) SetUserStatus(username string, prop UserProperty, val interface{}) error {
+	user, err := state.users.Get(username)
+	if err != nil {
+		return err
+	}
+
+	switch {
+	case prop == Confirmed:
+		user.Confirmed = val.(bool)
+	case prop == Password:
+		user.Password = val.(string)
+	case prop == Active:
+		user.Active = val.(bool)
+		if val.(bool) == true {
+			user.Loggedin = false
+		}
+	case prop == Admin:
+		user.Admin = val.(bool)
+	case prop == Loggedin:
+		user.Loggedin = val.(bool)
+	}
+
+	err = state.users.Put(username, user)
+	if err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// GetAll returns a list of all "what" selector/ usernames, email etc.
+func (state *UserState) GetAll(what string) ([]string, error) {
+	//return state.usernames.GetAll()
+	usernames := []string{}
+
+	ctx := context.Background()
+	store := state.users.(*backend.Datastore)
+	client := store.Backend()
+
+	_, err := client.GetAll(ctx, datastore.NewQuery("Users").Project(what), usernames)
+	if err != nil {
+		return nil, err
+	}
+
+	return usernames, nil
+}
+
+// GetAllFiltered returns a list from all the registered users with the selector
+// what, and the Filters them by filter
+// For examplte if you would love to get all users name of non confirmed users
+// you would call GetAllFiltered("Username",Confirmed =", "false")
+func (state *UserState) GetAllFiltered(what, filter, filterVal string) ([]string, error) {
+	usernames := []string{}
+
+	ctx := context.Background()
+	store := state.users.(*backend.Datastore)
+	client := store.Backend()
+
+	_, err := client.GetAll(ctx, datastore.NewQuery("Users").
+		Filter(filter, filterVal).
+		Project(what), usernames)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return usernames, nil
+}
+
+// AddUser creates a user and hashes the password, does not check for rights.
+// The given data must be valid.
+func (state *UserState) AddUser(user *backend.User) error {
+	err := state.users.Put(user.Username, user)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// CurrentUserAdmin checks if the current user is logged in and has administrator rights.
+func (state *UserState) IsCurrentUserAdmin(req *http.Request) bool {
+	username, err := state.GetUsernameFromCookie(req)
+	if err != nil {
+		return false
+	}
+
+	login, _ := state.GetUserStatus(username, Loggedin)
+	admin, _ := state.GetUserStatus(username, Admin)
+
+	return login.(bool) && admin.(bool)
+}
+
+// Username is a convenience function for returning the current username
+// (from the browser cookie), or an empty string.
+func (state *UserState) GetCurrentUserUsername(req *http.Request) string {
+	username, err := state.GetUsernameFromCookie(req)
+	if err != nil {
+		return ""
+	}
+	return username
+}
+
+// Login is a convenience function for logging a user in and storing the
+// username in a cookie, returns an error if the cookie could not be set.
+func (state *UserState) Login(w http.ResponseWriter, username string) error {
+	_ = state.SetUserStatus(username, Loggedin, true)
+	return state.SetUsernameIntoCookie(w, username)
+}
+
+// Logout is a convenience function for logging out a user.
+func (state *UserState) Logout(username string) {
+	_ = state.SetUserStatus(username, Loggedin, false)
+}
+
+// AlreadyHasConfirmationCode goes through all the confirmationCodes of all
+// the unconfirmed users and checks if this confirmationCode already is in use.
+func (state *UserState) AlreadyHasConfirmationCode(confirmationCode string) bool {
+	unconfirmedUsernames, err := state.GetAllFiltered("Users", "Confirmed =", "false")
+	if err != nil {
+		return false
+	}
+	for _, aUsername := range unconfirmedUsernames {
+		aConfirmationCode, err := state.GetUserStatus(aUsername, ConfirmationCode)
+		if err != nil {
+			// If the confirmation code can not be found, that's okay too
+			return false
+		}
+		if confirmationCode == aConfirmationCode.(string) {
+			// Found it
+			return true
+		}
+	}
+	return false
+}
+
+// FindUserByConfirmationCode tries to find the corresponding username,
+// given a unique confirmation code.
+func (state *UserState) FindUserByConfirmationCode(confirmationcode string) (string, error) {
+	unconfirmedUsernames, err := state.GetAllFiltered("Username", "Confirmed = ", "false")
+	if err != nil {
+		return "", errors.New("All existing users are already confirmed.")
+	}
+
+	// Find the username by looking up the confirmationcode on unconfirmed users
+	username := ""
+	for _, aUsername := range unconfirmedUsernames {
+		aConfirmationCode, err := state.GetUserStatus(aUsername, ConfirmationCode)
+		if err != nil {
+			// If the confirmation code can not be found, just skip this one
+			continue
+		}
+		if confirmationcode == aConfirmationCode.(string) {
+			// Found the right user
+			username = aUsername
+			break
+		}
+	}
+
+	// Check that the user is there
+	if username == "" {
+		return username, errors.New("The confirmation code is no longer valid.")
+	}
+	hasUser := state.HasUser(username)
+	if !hasUser {
+		return username, errors.New("The user that is to be confirmed no longer exists.")
+	}
+
+	return username, nil
+}
+
+// ConfirmUserByConfirmationCode takes a unique confirmation code and marks
+// the corresponding unconfirmed user as confirmed.
+func (state *UserState) ConfirmUserByConfirmationCode(confirmationcode string) error {
+	/*username, err := state.FindUserByConfirmationCode(confirmationcode)
+	if err != nil {
+		return err
+	}
+	state.Confirm(username)*/
+	return nil
+}
+
+// GenerateUniqueConfirmationCode generates a unique confirmation code that
+// can be used for confirming users.
+func (state *UserState) GenerateUniqueConfirmationCode() (string, error) {
+	const maxConfirmationCodeLength = 100 // when are the generated confirmation codes unreasonably long
+	length := minConfirmationCodeLength
+	confirmationCode := randomstring.GenReadable(length)
+	for state.AlreadyHasConfirmationCode(confirmationCode) {
+		// Increase the length of the confirmationCode random string every time there is a collision
+		length++
+		confirmationCode = randomstring.GenReadable(length)
+		if length > maxConfirmationCodeLength {
+			// This should never happen
+			return confirmationCode, errors.New("Too many generated confirmation codes are not unique!")
+		}
+	}
+	return confirmationCode, nil
+}
+
+// PasswordHash returns the password hash for the given username.
+func (state *UserState) GetPasswordHash(username string) (string, error) {
+	user, err := state.users.Get(username)
+	if err != nil {
+		return "", err
+	}
+
+	return user.Password, nil
 }
 
 // HashPassword takes a password and creates a password hash.
@@ -480,30 +410,13 @@ func (state *UserState) HashPassword(username, password string) (string, error) 
 	return hash, nil
 }
 
-// SetPassword sets/changes the password for a user.
-// Does not take a password hash, will hash the password string.
-func (state *UserState) SetPassword(username, password string) error {
-	user, err := state.users.Get(username)
-	if err != nil {
-		return err
-	}
-
-	user.Password, _ = state.HashPassword(username, password)
-	err = state.users.Put(username, user)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // Return the stored hash, or an empty byte slice.
 func (state *UserState) storedHash(username string) []byte {
-	hashString, err := state.PasswordHash(username)
+	hashString, err := state.GetUserStatus(username, Password)
 	if err != nil {
 		return []byte{}
 	}
-	return []byte(hashString)
+	return []byte(hashString.(string))
 }
 
 // CorrectPassword checks if a password is correct. "username" is needed because
@@ -533,107 +446,6 @@ func (state *UserState) CorrectPassword(username, password string) bool {
 		return correctBcrypt(hash, password)
 	}
 	return false
-}
-
-// AlreadyHasConfirmationCode goes through all the confirmationCodes of all
-// the unconfirmed users and checks if this confirmationCode already is in use.
-func (state *UserState) AlreadyHasConfirmationCode(confirmationCode string) bool {
-	unconfirmedUsernames, err := state.AllUnconfirmedUsernames()
-	if err != nil {
-		return false
-	}
-	for _, aUsername := range unconfirmedUsernames {
-		aConfirmationCode, err := state.ConfirmationCode(aUsername)
-		if err != nil {
-			// If the confirmation code can not be found, that's okay too
-			return false
-		}
-		if confirmationCode == aConfirmationCode {
-			// Found it
-			return true
-		}
-	}
-	return false
-}
-
-// FindUserByConfirmationCode tries to find the corresponding username,
-// given a unique confirmation code.
-func (state *UserState) FindUserByConfirmationCode(confirmationcode string) (string, error) {
-	unconfirmedUsernames, err := state.AllUnconfirmedUsernames()
-	if err != nil {
-		return "", errors.New("All existing users are already confirmed.")
-	}
-
-	// Find the username by looking up the confirmationcode on unconfirmed users
-	username := ""
-	for _, aUsername := range unconfirmedUsernames {
-		aConfirmationCode, err := state.ConfirmationCode(aUsername)
-		if err != nil {
-			// If the confirmation code can not be found, just skip this one
-			continue
-		}
-		if confirmationcode == aConfirmationCode {
-			// Found the right user
-			username = aUsername
-			break
-		}
-	}
-
-	// Check that the user is there
-	if username == "" {
-		return username, errors.New("The confirmation code is no longer valid.")
-	}
-	hasUser := state.HasUser(username)
-	if !hasUser {
-		return username, errors.New("The user that is to be confirmed no longer exists.")
-	}
-
-	return username, nil
-}
-
-// Confirm marks a user as confirmed, and removes the username from the list
-// of unconfirmed users.
-func (state *UserState) Confirm(username string) {
-	// Remove from the list of unconfirmed usernames
-	state.RemoveUnconfirmed(username)
-
-	// Mark user as confirmed
-	_ = state.MarkConfirmed(username)
-}
-
-// ConfirmUserByConfirmationCode takes a unique confirmation code and marks
-// the corresponding unconfirmed user as confirmed.
-func (state *UserState) ConfirmUserByConfirmationCode(confirmationcode string) error {
-	/*username, err := state.FindUserByConfirmationCode(confirmationcode)
-	if err != nil {
-		return err
-	}
-	state.Confirm(username)*/
-	return nil
-}
-
-// SetMinimumConfirmationCodeLength sets the minimum length of the user
-// confirmation code. The default is 20.
-func (state *UserState) SetMinimumConfirmationCodeLength(length int) {
-	minConfirmationCodeLength = length
-}
-
-// GenerateUniqueConfirmationCode generates a unique confirmation code that
-// can be used for confirming users.
-func (state *UserState) GenerateUniqueConfirmationCode() (string, error) {
-	const maxConfirmationCodeLength = 100 // when are the generated confirmation codes unreasonably long
-	length := minConfirmationCodeLength
-	confirmationCode := randomstring.GenReadable(length)
-	for state.AlreadyHasConfirmationCode(confirmationCode) {
-		// Increase the length of the confirmationCode random string every time there is a collision
-		length++
-		confirmationCode = randomstring.GenReadable(length)
-		if length > maxConfirmationCodeLength {
-			// This should never happen
-			return confirmationCode, errors.New("Too many generated confirmation codes are not unique!")
-		}
-	}
-	return confirmationCode, nil
 }
 
 // ValidUsernamePassword only checks if the given username and password are
