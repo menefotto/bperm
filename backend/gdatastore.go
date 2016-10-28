@@ -3,7 +3,6 @@ package backend
 import (
 	"context"
 	"errors"
-	"log"
 
 	"cloud.google.com/go/datastore"
 )
@@ -78,7 +77,6 @@ func (d *Datastore) Close() {
 }
 
 func (d *Datastore) newKey(id string) *datastore.Key {
-	log.Println("new key crated with entity: ", d.kind)
 	return datastore.NewKey(context.Background(), d.kind, id, 0, nil)
 }
 

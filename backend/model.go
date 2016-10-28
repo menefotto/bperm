@@ -3,6 +3,8 @@ package backend
 type User struct {
 	Email            string
 	Username         string
+	Name             string
+	LastName         string
 	Password         string
 	PhotoUrl         string
 	Confirmed        bool

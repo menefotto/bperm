@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"math/rand"
 	"net/http"
 	"time"
@@ -43,7 +42,6 @@ func NewUserStateSimple() (*UserState, error) {
 func NewUserState(filename string, randomseed bool) (*UserState, error) {
 	var db backend.Datastore
 
-	log.Println("before opening db")
 	err := db.Open(filename, "Users")
 	if err != nil {
 		return nil, err
@@ -79,10 +77,17 @@ func (state *UserState) Close() {
 func (state *UserState) HasUser(username string) bool {
 	_, err := state.users.Get(username)
 	if err != nil {
-		log.Println("user not found :", err)
 		return false
 	}
 	return true
+}
+
+func (state *UserState) GetUser(username string) (*backend.User, error) {
+	user, err := state.users.Get(username)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
 }
 
 // UsernameCookie retrieves the username that is stored in a cookie in the browser, if available.
@@ -151,6 +156,7 @@ const (
 	Password
 	Active
 	Email
+	Username
 )
 
 func (state *UserState) GetUserStatus(id string, prop UserProperty) (result interface{}, err error) {
@@ -171,6 +177,8 @@ func (state *UserState) GetUserStatus(id string, prop UserProperty) (result inte
 		result, err = user.Loggedin, nil
 	case prop == Email:
 		result, err = user.Email, nil
+	case prop == Username:
+		result, err = user.Username, nil
 	default:
 		result, err = false, fmt.Errorf("Property is not gettable or defined\n")
 	}
@@ -208,7 +216,7 @@ func (state *UserState) SetUserStatus(username string, prop UserProperty, val in
 	return nil
 }
 
-// GetAll returns a list of all "what" selector/ usernames, email etc.
+// GetAll returns a list of all "what" selector/ usernames, email etc./ only string fields
 func (state *UserState) GetAll(what string) ([]string, error) {
 	//return state.usernames.GetAll()
 	usernames := []string{}
