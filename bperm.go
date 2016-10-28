@@ -1,4 +1,4 @@
-// Package permissionbolt provides middleware for keeping track of users,
+// Package bperm provides middleware for keeping track of users,
 // login states and permissions.
 package bperm
 
@@ -7,6 +7,7 @@ import (
 	"strings"
 )
 
+// Paths is the Url path type
 type Paths string
 
 const (
@@ -47,7 +48,7 @@ func NewWithConf(filename string) (*Permissions, error) {
 
 }
 
-// NewPermissions initializes a Permissions struct with the given UserState and
+// NewFromUserState initializes a Permissions struct with the given UserState and
 // a few default paths for admin/user/public path prefixes.
 func NewFromUserState(state *UserState) *Permissions {
 	paths := map[Paths][]string{}
@@ -66,39 +67,39 @@ func NewFromUserState(state *UserState) *Permissions {
 		DefaultDenyFunc}
 }
 
-// SetDenyFunction specifies a http.HandlerFunc for when the permissions are denied
+// SetDenyFunc specifies a http.HandlerFunc for when the permissions are denied
 func (perm *Permissions) SetDenyFunc(f http.HandlerFunc) {
 	perm.denied = f
 }
 
-// DenyFunction returns the currently configured http.HandlerFunc for when
+// GetDenyFunc returns the currently configured http.HandlerFunc for when
 // permissions are denied
 func (perm *Permissions) GetDenyFunc() http.HandlerFunc {
 	return perm.denied
 }
 
-// default deny HandlerFunc
+// DefaultDenyFunc is the default deny HandlerFunc
 func DefaultDenyFunc(w http.ResponseWriter, req *http.Request) {
 	http.Error(w, "Permission denied.", http.StatusForbidden)
 }
 
-// UserState retrieves the UserState struct
+// GetUserState retrieves the UserState struct
 func (perm *Permissions) GetUserState() *UserState {
 	return perm.state
 }
 
-// Clear sets every permission to public
+// Reset sets every permission to public
 func (perm *Permissions) Reset() {
 	perm.paths[aPaths] = []string{}
 	perm.paths[uPaths] = []string{}
 }
 
-// AddPublicPath adds an URL path prefix for pages that are public
+// AddPath adds an URL path prefix for pages that are public
 func (perm *Permissions) AddPath(valid Paths, prefix string) {
 	perm.paths[valid] = append(perm.paths[valid], prefix)
 }
 
-// SetAdminPath sets all URL path prefixes for pages that are only accessible
+// SetPath sets all URL path prefixes for pages that are only accessible
 // for logged in administrators
 func (perm *Permissions) SetPath(valid Paths, pathPrefixes []string) {
 	perm.paths[valid] = pathPrefixes

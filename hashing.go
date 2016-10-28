@@ -10,13 +10,17 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// ErrBcrypt happends with bcryt fails to hash...
 var ErrBcrypt = errors.New("Bpermission: bcrypt could not hash the passwd")
 
 // Hash the password with sha256 (the username is needed for salting)
 func hashSha256(cookieSecret, username, password string) (string, error) {
 	hasher := sha256.New()
 	// Use the cookie secret as additional salt
-	io.WriteString(hasher, password+cookieSecret+username)
+	_, err := io.WriteString(hasher, password+cookieSecret+username)
+	if err != nil {
+		return "", err
+	}
 
 	return string(hasher.Sum(nil)), nil
 }

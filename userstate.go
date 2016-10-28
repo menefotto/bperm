@@ -3,6 +3,7 @@ package bperm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"math/rand"
 	"net/http"
@@ -97,8 +98,8 @@ func (state *UserState) HasUser(username string) bool {
 	return true
 }
 
-// TODO add error reporting
 // IsConfirmed checks if a user is confirmed (can be used for "e-mail confirmation").
+// TODO add error reporting
 func (state *UserState) IsConfirmed(username string) bool {
 	user, err := state.users.Get(username)
 	if err != nil {
@@ -155,7 +156,11 @@ func (state *UserState) SetUsernameCookie(w http.ResponseWriter, username string
 	}
 	// Create a cookie that lasts for a while ("timeout" seconds),
 	// this is the equivivalent of a session for a given username.
-	bcookie.SetPath(w, "user", username, state.cookieTime, "/", state.cookieSecret)
+	err := bcookie.SetPath(w, "user", username, state.cookieTime, "/", state.cookieSecret)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -196,8 +201,8 @@ func (state *UserState) PasswordHash(username string) (string, error) {
 	return user.Password, nil
 }
 
-//TODO expose query filter in the interface query filter
 // AllUnconfirmedUsernames returns a list of all registered users that are not yet confirmed.
+//TODO expose query filter in the interface query filter
 func (state *UserState) AllUnconfirmedUsernames() ([]string, error) {
 	usernames := []string{}
 
@@ -262,10 +267,15 @@ func (state *UserState) MarkConfirmed(username string) error {
 }
 
 // RemoveUser removes a user and the login status for this user.
-func (state *UserState) RemoveUser(username string) {
+func (state *UserState) RemoveUser(username string) error {
 	// Remove additional data as well
 	//state.users.DelKey(username, "loggedin")
-	state.users.Del(username)
+	err := state.users.Del(username)
+	if err != nil {
+		return fmt.Errorf("Failed to logout user %s\n", username)
+	}
+
+	return nil
 }
 
 // SetAdminStatus marks a user as an administrator.
@@ -377,7 +387,7 @@ func (state *UserState) SetLoggedOut(username string) error {
 // Login is a convenience function for logging a user in and storing the
 // username in a cookie, returns an error if the cookie could not be set.
 func (state *UserState) Login(w http.ResponseWriter, username string) error {
-	state.SetLoggedIn(username)
+	_ = state.SetLoggedIn(username)
 	return state.SetUsernameCookie(w, username)
 }
 
@@ -389,7 +399,7 @@ func (state *UserState) ClearCookie(w http.ResponseWriter) {
 
 // Logout is a convenience function for logging out a user.
 func (state *UserState) Logout(username string) {
-	state.SetLoggedOut(username)
+	_ = state.SetLoggedOut(username)
 }
 
 // Username is a convenience function for returning the current username
@@ -588,7 +598,7 @@ func (state *UserState) Confirm(username string) {
 	state.RemoveUnconfirmed(username)
 
 	// Mark user as confirmed
-	state.MarkConfirmed(username)
+	_ = state.MarkConfirmed(username)
 }
 
 // ConfirmUserByConfirmationCode takes a unique confirmation code and marks
