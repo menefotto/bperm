@@ -26,7 +26,7 @@ type UserState struct {
 	secureCookie      bcookie.SecureType
 	cookieSecret      string // Secret for storing secure cookies
 	cookieTime        int64  // How long a cookie should last, in seconds
-	passwordAlgorithm string // Default: "bcrypt+" the only one allowed
+	passwordAlgorithm string //default to bcrupt+
 }
 
 // NewUserStateSimple creates a new UserState struct that can be used for managing users.
@@ -422,13 +422,7 @@ func (state *UserState) HashPassword(username, password string) (string, error) 
 		hash string
 	)
 
-	switch state.passwordAlgorithm {
-	case "sha256":
-		hash, err = hashSha256(state.cookieSecret, username, password)
-	case "bcrypt", "bcrypt+":
-		hash, err = hashBcrypt(password)
-	}
-	// Only valid password algorithms should be allowed to set
+	hash, err = hashBcrypt(password)
 	if err != nil {
 		return "", err
 	}
@@ -461,14 +455,7 @@ func (state *UserState) CorrectPassword(username, password string) bool {
 
 	// Check the password with the right password algorithm
 	switch state.passwordAlgorithm {
-	case "sha256":
-		return correctSha256(hash, state.cookieSecret, username, password)
-	case "bcrypt":
-		return correctBcrypt(hash, password)
-	case "bcrypt+": // for backwards compatibility with sha256
-		if isSha256(hash) && correctSha256(hash, state.cookieSecret, username, password) {
-			return true
-		}
+	case "bcrypt", "bcrypt+":
 		return correctBcrypt(hash, password)
 	}
 	return false

@@ -38,8 +38,8 @@ func New() (*Permissions, error) {
 }
 
 // NewWithConf initializes a Permissions struct with a database filename
-func NewWithConf(filename string) (*Permissions, error) {
-	state, err := NewUserState(filename, true)
+func NewWithConf(name string) (*Permissions, error) {
+	state, err := NewUserState(name, true)
 	if err != nil {
 		return nil, err
 	}
@@ -87,12 +87,6 @@ func (perm *Permissions) GetUserState() *UserState {
 	return perm.state
 }
 
-// Reset sets every permission to public
-func (perm *Permissions) Reset() {
-	perm.paths[aPaths] = []string{}
-	perm.paths[uPaths] = []string{}
-}
-
 // AddPath adds an URL path prefix for pages that are public
 func (perm *Permissions) AddPath(valid Paths, prefix string) {
 	perm.paths[valid] = append(perm.paths[valid], prefix)
@@ -102,6 +96,12 @@ func (perm *Permissions) AddPath(valid Paths, prefix string) {
 // for logged in administrators
 func (perm *Permissions) SetPath(valid Paths, pathPrefixes []string) {
 	perm.paths[valid] = pathPrefixes
+}
+
+// Reset sets every permission to public
+func (perm *Permissions) Reset() {
+	perm.paths[aPaths] = []string{}
+	perm.paths[uPaths] = []string{}
 }
 
 // Rejected checks if a given http request should be rejected
