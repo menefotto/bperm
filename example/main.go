@@ -32,11 +32,18 @@ func main() {
 	userstate := perm.GetUserState()
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
-		user, _ := userstate.GetUser("bob")
-		fmt.Fprintf(w, "Has user bob: %v\n", user.Active)
-		fmt.Fprintf(w, "Logged in on server: %v\n", user.Loggedin)
-		fmt.Fprintf(w, "Is confirmed: %v\n", user.Confirmed)
-		fmt.Fprintf(w, "Username stored in cookies (or blank): %v\n", user.Username)
+		user, err := userstate.GetUser("bob")
+		if err != nil {
+			fmt.Fprintf(w, "Users is not registered\n")
+		} else {
+			fmt.Fprintf(w, "Has user bob: %v\n", true)
+			fmt.Fprintf(w, "User is active: %v\n", user.Active)
+			fmt.Fprintf(w, "Logged in on server: %v\n", user.Loggedin)
+			fmt.Fprintf(w, "Is confirmed: %v\n", user.Confirmed)
+			fmt.Fprintf(w, "Username stored in cookies (or blank): %v\n", user.Username)
+
+		}
+
 		fmt.Fprintf(w, "Current user is logged in, has a valid cookie and *admin rights*: %v\n", userstate.IsCurrentUserAdmin(req))
 		fmt.Fprintf(w, "\nTry: /register, /confirm, /remove, /login, /logout, /makeadmin, /clear, /data and /admin")
 	})
@@ -44,9 +51,16 @@ func main() {
 	mux.HandleFunc("/register", func(w http.ResponseWriter, req *http.Request) {
 		err := userstate.AddUser(user)
 		if err != nil {
-			log.Println("failed to register user err: ", err)
+			fmt.Fprintf(w, "failed to register user err: %v\n", err)
+			return
 		}
-		val, _ := userstate.GetUserStatus("bob", bperm.Username)
+
+		val, err := userstate.GetUserStatus("bob", bperm.Username)
+		if err != nil {
+			fmt.Fprintf(w, "Err getting user status %v\n", err)
+			return
+		}
+
 		fmt.Fprintf(w, "User bob was created: %v\n", val.(string))
 	})
 

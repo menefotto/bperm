@@ -23,9 +23,10 @@ const (
 // The UserState struct holds the pointer to the underlying database and a few other settings
 type UserState struct {
 	users             backend.Db // A db or users with different fields ("loggedin", "confirmed") etc
-	cookieSecret      string     // Secret for storing secure cookies
-	cookieTime        int64      // How long a cookie should last, in seconds
-	passwordAlgorithm string     // Default: "bcrypt+" the only one allowed
+	secureCookie      bcookie.SecureType
+	cookieSecret      string // Secret for storing secure cookies
+	cookieTime        int64  // How long a cookie should last, in seconds
+	passwordAlgorithm string // Default: "bcrypt+" the only one allowed
 }
 
 // NewUserStateSimple creates a new UserState struct that can be used for managing users.
@@ -60,7 +61,7 @@ func NewUserState(filename string, randomseed bool) (*UserState, error) {
 	// Default password hashing algorithm is "bcrypt+", which is the same as
 	// "bcrypt", but with backwards compatibility for checking sha256 hashes.
 	// "bcrypt+", "bcrypt" or "sha256"
-	return &UserState{&db, secret, 3600 * 24, "bcrypt+"}, nil
+	return &UserState{&db, bcookie.New(), secret, 3600 * 24, "bcrypt+"}, nil
 }
 
 // Database retrieves the underlying database
@@ -93,10 +94,15 @@ func (state *UserState) GetUser(username string) (*backend.User, error) {
 // UsernameCookie retrieves the username that is stored in a cookie in the browser, if available.
 // TODO make them part of the bcookie package
 func (state *UserState) GetUsernameFromCookie(req *http.Request) (string, error) {
-	username, ok := bcookie.Get(req, "user", state.cookieSecret)
-	if ok && (username != "") {
-		return username, nil
+	username, err := state.secureCookie.Get(req, "user", state.cookieSecret)
+	if err != nil {
+		return "", err
 	}
+
+	if username == "" {
+		return "", errors.New("Could not get username is empty :(")
+	}
+
 	return "", errors.New("Could not retrieve the username from browser cookie")
 }
 
@@ -110,8 +116,8 @@ func (state *UserState) SetUsernameIntoCookie(w http.ResponseWriter, username st
 		return errors.New("Can't store cookie for non-existsing user")
 	}
 	// Create a cookie that lasts for a while ("timeout" seconds),
-	// this is the equivivalent of a session for a given username.
-	err := bcookie.SetPath(w, "user", username, state.cookieTime, "/", state.cookieSecret)
+	// this is the equivalent of a session for a given username.
+	err := state.secureCookie.SetPath(w, "user", username, state.cookieTime, "/", state.cookieSecret)
 	if err != nil {
 		return err
 	}
@@ -142,7 +148,7 @@ func (state *UserState) SetCookieSecret(cookieSecret string) {
 // ClearCookie tries to clear the user cookie by setting it to be expired.
 // Some browsers *may* be configured to keep cookies even after this.
 func (state *UserState) ClearCookie(w http.ResponseWriter) {
-	bcookie.Del(w, "user", "/")
+	state.secureCookie.Del(w, "user", "/")
 }
 
 // UserProperty identifies what filed we want to change from the User
@@ -183,7 +189,7 @@ func (state *UserState) GetUserStatus(id string, prop UserProperty) (result inte
 		result, err = false, fmt.Errorf("Property is not gettable or defined\n")
 	}
 
-	return result, err
+	return
 }
 
 func (state *UserState) SetUserStatus(username string, prop UserProperty, val interface{}) error {
@@ -258,7 +264,7 @@ func (state *UserState) GetAllFiltered(what, filter, filterVal string) ([]string
 // AddUser creates a user and hashes the password, does not check for rights.
 // The given data must be valid.
 func (state *UserState) AddUser(user *backend.User) error {
-	err := state.users.Put(user.Username, user)
+	err := state.users.Put(user.Name, user)
 	if err != nil {
 		return err
 	}
@@ -292,7 +298,19 @@ func (state *UserState) GetCurrentUserUsername(req *http.Request) string {
 // Login is a convenience function for logging a user in and storing the
 // username in a cookie, returns an error if the cookie could not be set.
 func (state *UserState) Login(w http.ResponseWriter, username string) error {
-	_ = state.SetUserStatus(username, Loggedin, true)
+	user, err := state.GetUser(username)
+	if err != nil {
+		return err
+	}
+
+	if !user.Active {
+		return errors.New("Username is not registered")
+	}
+
+	if err = state.SetUserStatus(username, Loggedin, true); err != nil {
+		return err
+	}
+
 	return state.SetUsernameIntoCookie(w, username)
 }
 
