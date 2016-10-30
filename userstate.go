@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"regexp"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/datastore"
@@ -201,8 +203,13 @@ func (state *UserState) SetUserStatus(username string, prop UserProperty, val in
 	switch {
 	case prop == Confirmed:
 		user.Confirmed = val.(bool)
+	case prop == Email:
+		user.Email = val.(string)
 	case prop == Password:
-		user.Password = val.(string)
+		user.Password, err = state.HashPassword(username, val.(string))
+		if err != nil {
+			return err
+		}
 	case prop == Active:
 		user.Active = val.(bool)
 		if val.(bool) == true {
@@ -264,7 +271,7 @@ func (state *UserState) GetAllFiltered(what, filter, filterVal string) ([]string
 // AddUser creates a user and hashes the password, does not check for rights.
 // The given data must be valid.
 func (state *UserState) AddUser(user *backend.User) error {
-	err := state.users.Put(user.Name, user)
+	err := state.users.Put(user.Email, user)
 	if err != nil {
 		return err
 	}
@@ -375,17 +382,6 @@ func (state *UserState) FindUserByConfirmationCode(confirmationcode string) (str
 	return username, nil
 }
 
-// ConfirmUserByConfirmationCode takes a unique confirmation code and marks
-// the corresponding unconfirmed user as confirmed.
-func (state *UserState) ConfirmUserByConfirmationCode(confirmationcode string) error {
-	/*username, err := state.FindUserByConfirmationCode(confirmationcode)
-	if err != nil {
-		return err
-	}
-	state.Confirm(username)*/
-	return nil
-}
-
 // GenerateUniqueConfirmationCode generates a unique confirmation code that
 // can be used for confirming users.
 func (state *UserState) GenerateUniqueConfirmationCode() (string, error) {
@@ -430,25 +426,19 @@ func (state *UserState) HashPassword(username, password string) (string, error) 
 	return hash, nil
 }
 
-// Return the stored hash, or an empty byte slice.
-func (state *UserState) storedHash(username string) []byte {
-	hashString, err := state.GetUserStatus(username, Password)
-	if err != nil {
-		return []byte{}
-	}
-	return []byte(hashString.(string))
-}
-
-// CorrectPassword checks if a password is correct. "username" is needed because
+// IsUserPassword checks if a password is correct. "username" is needed because
 // it may be part of the hash for some password hashing algorithms.
-func (state *UserState) CorrectPassword(username, password string) bool {
+func (state *UserState) IsUserPassword(username, password string) bool {
 
 	if !state.HasUser(username) {
 		return false
 	}
 
 	// Retrieve the stored password hash
-	hash := state.storedHash(username)
+	hash, err := state.GetPasswordHash(username)
+	if err != nil {
+		return false
+	}
 	if len(hash) == 0 {
 		return false
 	}
@@ -461,23 +451,49 @@ func (state *UserState) CorrectPassword(username, password string) bool {
 	return false
 }
 
-// ValidUsernamePassword only checks if the given username and password are
+// IsPasswordAllowed only checks if the given username and password are
 // different and if they only contain letters, numbers and/or underscore.
 // For checking if a given password is correct, use the `CorrectPassword`
 // function instead.
-func ValidUsernamePassword(username, password string) error {
-	const allowedLetters = "abcdefghijklmnopqrstuvwxyzæøåABCDEFGHIJKLMNOPQRSTUVWXYZÆØÅ_0123456789"
-NEXT:
-	for _, letter := range username {
-		for _, allowedLetter := range allowedLetters {
-			if letter == allowedLetter {
-				continue NEXT // check the next letter in the username
-			}
+func IsPasswordAllowed(username, password string) error {
+	const (
+		equal    = "Username and password can't be equal!\n"
+		distance = "Username and password can't contain same words!\n"
+		alnum    = "Password does not have numbers and letters.\n"
+		special  = "Password does not have one of the following:!@#$%^+&*~-_\n"
+		short    = "Password does not have 9 characters\n"
+	)
+	usern := strings.ToLower(username)
+	passw := strings.ToLower(password)
+	if usern == passw {
+		return fmt.Errorf(equal)
+	}
+
+	editd := randomstring.LevenshteinDistance(usern, passw)
+	if editd < len(password)-len(password)/4 {
+		return fmt.Errorf(distance)
+	}
+
+	if len(password) < 9 {
+		return fmt.Errorf(short)
+	}
+
+	rex := regexp.MustCompile(`[[:alnum:]]+`)
+	if !rex.Match([]byte(password)) {
+		return fmt.Errorf(alnum)
+	}
+
+	var (
+		ok         = false
+		characters = []string{"!#$%&*+-?@^_~"}
+	)
+
+	for i := 0; i < len(characters); i++ {
+		ok = strings.ContainsAny(password, characters[i])
+		if !ok && i == len(characters)-1 {
+			return fmt.Errorf(special)
 		}
-		return errors.New("Only letters, numbers and underscore are allowed in usernames.")
 	}
-	if username == password {
-		return errors.New("Username and password must be different, try another password.")
-	}
+
 	return nil
 }
