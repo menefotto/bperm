@@ -15,8 +15,7 @@ import (
 )
 
 const (
-	defaultFilename           = "waterandboards-auth"
-	minConfirmationCodeLength = 32 // minimum length of the confirmation code
+	DefaultProjectId = "waterandboards-auth"
 )
 
 // The UserState struct holds the pointer to the underlying database and a few other settings
@@ -30,7 +29,7 @@ type UserState struct {
 // The random number generator will be seeded after generating the cookie secret.
 func NewUserStateSimple() (*UserState, error) {
 	// connection string | initialize random generator after generating the cookie secret
-	return NewUserState(defaultFilename, true)
+	return NewUserState(DefaultProjectId, true)
 }
 
 // NewUserState creates a new UserState struct that can be used for managing users.
@@ -279,26 +278,33 @@ func (state *UserState) AddUser(user *backend.User) error {
 }
 
 // CurrentUserAdmin checks if the current user is logged in and has administrator rights.
-func (state *UserState) IsCurrentUserAdmin(req *http.Request) bool {
+func (state *UserState) IsCurrentUserAdmin(req *http.Request) (bool, error) {
 	username, err := state.GetUsernameFromCookie(req)
 	if err != nil {
-		return false
+		return false, err
 	}
 
-	login, _ := state.GetUserStatus(username, Loggedin)
-	admin, _ := state.GetUserStatus(username, Admin)
+	login, err := state.GetUserStatus(username, Loggedin)
+	if err != nil {
+		return false, err
+	}
 
-	return login.(bool) && admin.(bool)
+	admin, err := state.GetUserStatus(username, Admin)
+	if err != nil {
+		return false, err
+	}
+
+	return login.(bool) && admin.(bool), nil
 }
 
 // Username is a convenience function for returning the current username
 // (from the browser cookie), or an empty string.
-func (state *UserState) GetCurrentUserNickname(req *http.Request) string {
+func (state *UserState) GetCurrentUserNickname(req *http.Request) (string, error) {
 	username, err := state.GetUsernameFromCookie(req)
 	if err != nil {
-		return ""
+		return "", err
 	}
-	return username
+	return username, nil
 }
 
 // Login is a convenience function for logging a user in and storing the
@@ -321,8 +327,8 @@ func (state *UserState) Login(w http.ResponseWriter, username string) error {
 }
 
 // Logout is a convenience function for logging out a user.
-func (state *UserState) Logout(username string) {
-	_ = state.SetUserStatus(username, Loggedin, false)
+func (state *UserState) Logout(username string) error {
+	return state.SetUserStatus(username, Loggedin, false)
 }
 
 // GetUserByConfirmationCode tries to find the corresponding username,
@@ -375,20 +381,20 @@ func (state *UserState) CheckUserPassword(username, password string) bool {
 	}
 
 	// Retrieve the stored password hash
-	value, err := state.GetUserStatus(username, Password)
+	user, err := state.GetUser(username)
 	if err != nil {
 		return false
 	}
 
-	hash := value.(string)
-	if len(hash) == 0 {
+	if len(user.Password) == 0 {
 		return false
 	}
 
 	// Check the password with the right password algorithm
 	switch state.passwordAlgorithm {
 	case "bcrypt", "bcrypt+":
-		return correctBcrypt(hash, password)
+		return correctBcrypt(user.Password, password)
 	}
+
 	return false
 }

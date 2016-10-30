@@ -115,7 +115,7 @@ func (perm *Permissions) Rejected(w http.ResponseWriter, req *http.Request) bool
 		// Reject if it is an admin page and user is not an admin
 		for _, prefix := range perm.paths[aPaths] {
 			if strings.HasPrefix(path, prefix) {
-				if !perm.state.IsCurrentUserAdmin(req) {
+				if ok, _ := perm.state.IsCurrentUserAdmin(req); !ok {
 					reject = true
 					break
 				}

@@ -1,6 +1,8 @@
 package bperm
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/bperm/backend"
@@ -39,6 +41,43 @@ func TestAddUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	u = &backend.User{
+		Name:             "carlo",
+		Username:         "hunter1",
+		Admin:            false,
+		Confirmed:        false,
+		ConfirmationCode: "1345",
+		Password:         "4321Asfdg@",
+	}
+	err = userstate.AddUser(u)
+	if err == nil {
+		t.Fatal(err)
+	}
+	u = &backend.User{
+		Name:             "carlo",
+		Email:            "carlo@mail.com",
+		Username:         "hunter1",
+		Admin:            false,
+		Confirmed:        false,
+		ConfirmationCode: "1345",
+	}
+	err = userstate.AddUser(u)
+	if err == nil {
+		t.Fatal(err)
+	}
+	u = &backend.User{
+		Name:             "carlo",
+		Email:            "carlo@mail.com",
+		Admin:            false,
+		Confirmed:        false,
+		ConfirmationCode: "1345",
+		Password:         "4321Asfdg@",
+	}
+	err = userstate.AddUser(u)
+	if err == nil {
+		t.Fatal(err)
+	}
+
 }
 
 func TestSetUserStatus(t *testing.T) {
@@ -143,8 +182,7 @@ func TestGetAllFiltered(t *testing.T) {
 }
 
 func TestCheckUserPassword(t *testing.T) {
-
-	ok := userstate.CheckUserPassword("hunter1", "4321Asfdg@")
+	ok := userstate.CheckUserPassword("carlo@mail.com", "14321Asfdg@")
 	if !ok {
 		t.Fatal("User password should match")
 	}
@@ -185,6 +223,45 @@ func TestIsPasswordAllowed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestGetUserByCode(t *testing.T) {
+	_, err := userstate.GetUserByConfirmationCode("1345")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestGetCurrentUserNicknameFail(t *testing.T) {
+	req := &http.Request{}
+	_, err := userstate.GetCurrentUserNickname(req)
+	if err == nil {
+		t.Fatal(err)
+	}
+}
+
+func TestIsCurrentUserAdminFail(t *testing.T) {
+	req := &http.Request{}
+	_, err := userstate.IsCurrentUserAdmin(req)
+	if err == nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLoginFail(t *testing.T) {
+	w := httptest.NewRecorder()
+	err := userstate.Login(w, "hunter1")
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestLogoutFail(t *testing.T) {
+	err := userstate.Logout("hunter1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 }
 
 func TestClose(t *testing.T) {
