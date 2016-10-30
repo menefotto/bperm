@@ -12,11 +12,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/bperm/randomstring"
 )
 
 type SecureType interface {
-	Get(r *http.Request, name, cookieSecret string) (string, error)
-	SetPath(w http.ResponseWriter, name, val string, age int64, path string, cookieSecret string) error
+	Get(r *http.Request, name string) (string, error)
+	SetPath(w http.ResponseWriter, name, val string, path string) error
 	Del(w http.ResponseWriter, cookieName, cookiePath string)
 }
 
@@ -26,21 +28,22 @@ const (
 )
 
 type Secure struct {
-	CookieExpirationTime int64
+	ExpirationTime int64
+	Secret         string
 }
 
 // New created a secure cookie with default 24 life
 func New() *Secure {
-	return &Secure{3600 * 24}
+	return &Secure{DefaultCookieTime, randomstring.GenReadable(32)}
 }
 
 // New created a secure cookie with optional cookie life specified in seconds
 func NewWithExpirationTime(cookieExpirationTime int64) *Secure {
-	return &Secure{cookieExpirationTime}
+	return &Secure{DefaultCookieTime, randomstring.GenReadable(32)}
 }
 
 // Get a secure cookie from a HTTP request
-func (s *Secure) Get(req *http.Request, name string, cookieSecret string) (string, error) {
+func (s *Secure) Get(req *http.Request, name string) (string, error) {
 	cookie, err := req.Cookie(name)
 	if err != nil {
 		return "", err
@@ -53,7 +56,7 @@ func (s *Secure) Get(req *http.Request, name string, cookieSecret string) (strin
 
 	val, timestamp, sig := parts[0], parts[1], parts[2]
 
-	if getSignature(cookieSecret, []byte(val), timestamp) != sig {
+	if getSignature(s.Secret, []byte(val), timestamp) != sig {
 		return "", err
 	}
 
@@ -83,27 +86,27 @@ func (s *Secure) Del(w http.ResponseWriter, cookieName, cookiePath string) {
 
 // SetPath a secure cookie with an explicit path.
 // age is the time-to-live, in seconds (0 means forever).
-func (s *Secure) SetPath(w http.ResponseWriter, name, val string, age int64, path string, cookieSecret string) error {
+func (s *Secure) SetPath(w http.ResponseWriter, name, val string, path string) error {
 
 	var (
 		utctime time.Time
 		encoded string
 	)
 
-	if len(cookieSecret) == 0 {
+	if len(s.Secret) == 0 {
 		return errors.New("Cookie secret not valid\n")
 	}
 
 	encoded = base64.StdEncoding.EncodeToString([]byte(val))
 
 	timestamp := strconv.FormatInt(time.Now().Unix(), 10)
-	sig := getSignature(cookieSecret, []byte(encoded), timestamp)
+	sig := getSignature(s.Secret, []byte(encoded), timestamp)
 	cookieVal := strings.Join([]string{encoded, timestamp, sig}, "|")
 
-	if age == 0 {
+	if s.ExpirationTime == 0 {
 		utctime = time.Unix(2147483647, 0) // 2^31 - 1 seconds (roughly 2038)
 	} else {
-		utctime = time.Unix(time.Now().Unix()+age, 0)
+		utctime = time.Unix(time.Now().Unix()+s.ExpirationTime, 0)
 	}
 
 	cookie := http.Cookie{

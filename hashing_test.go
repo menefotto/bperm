@@ -3,7 +3,7 @@ package bperm
 import "testing"
 
 func TesthashBcrypt(t *testing.T) {
-	_, err := hashBcrypt("1235")
+	_, err := HashBcrypt("1235")
 	if err != nil {
 		t.Fatal("Ops somthing went wrong not hashed\n")
 	}
@@ -11,7 +11,7 @@ func TesthashBcrypt(t *testing.T) {
 
 func TestcorrectBcrypt(t *testing.T) {
 	pass := "1235"
-	hash, err := hashBcrypt("1235")
+	hash, err := HashBcrypt("1235")
 	if err != nil {
 		t.Fatal("Ops somthing went wrong not hashed\n")
 	}

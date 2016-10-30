@@ -3,11 +3,8 @@ package bperm
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math/rand"
 	"net/http"
-	"regexp"
-	"strings"
 	"time"
 
 	"cloud.google.com/go/datastore"
@@ -24,11 +21,9 @@ const (
 
 // The UserState struct holds the pointer to the underlying database and a few other settings
 type UserState struct {
+	bcookie.SecureType
 	users             backend.Db // A db or users with different fields ("loggedin", "confirmed") etc
-	secureCookie      bcookie.SecureType
-	cookieSecret      string // Secret for storing secure cookies
-	cookieTime        int64  // How long a cookie should last, in seconds
-	passwordAlgorithm string //default to bcrupt+
+	passwordAlgorithm string     //default to bcrupt+
 }
 
 // NewUserStateSimple creates a new UserState struct that can be used for managing users.
@@ -54,7 +49,6 @@ func NewUserState(filename string, randomseed bool) (*UserState, error) {
 	// This must happen before the random seeding, or
 	// else people will have to log in again after every server restart
 	// Seed the random number generator
-	secret := randomstring.GenReadable(30)
 	if randomseed {
 		rand.Seed(time.Now().UnixNano())
 	}
@@ -63,7 +57,7 @@ func NewUserState(filename string, randomseed bool) (*UserState, error) {
 	// Default password hashing algorithm is "bcrypt+", which is the same as
 	// "bcrypt", but with backwards compatibility for checking sha256 hashes.
 	// "bcrypt+", "bcrypt" or "sha256"
-	return &UserState{&db, bcookie.New(), secret, 3600 * 24, "bcrypt+"}, nil
+	return &UserState{bcookie.New(), &db, "bcrypt+"}, nil
 }
 
 // Database retrieves the underlying database
@@ -96,16 +90,16 @@ func (state *UserState) GetUser(username string) (*backend.User, error) {
 // UsernameCookie retrieves the username that is stored in a cookie in the browser, if available.
 // TODO make them part of the bcookie package
 func (state *UserState) GetUsernameFromCookie(req *http.Request) (string, error) {
-	username, err := state.secureCookie.Get(req, "user", state.cookieSecret)
+	username, err := state.Get(req, "user")
 	if err != nil {
 		return "", err
 	}
 
 	if username == "" {
-		return "", errors.New("Could not get username is empty :(")
+		return "", errors.New("Could not get username, is empty :(")
 	}
 
-	return "", errors.New("Could not retrieve the username from browser cookie")
+	return username, nil
 }
 
 // SetUsernameCookie stores the given username in a cookie in the browser, if possible.
@@ -114,12 +108,13 @@ func (state *UserState) SetUsernameIntoCookie(w http.ResponseWriter, username st
 	if username == "" {
 		return errors.New("Can't set cookie for empty username")
 	}
+
 	if !state.HasUser(username) {
-		return errors.New("Can't store cookie for non-existsing user")
+		return errors.New("Can't store cookie for non-existing user")
 	}
 	// Create a cookie that lasts for a while ("timeout" seconds),
 	// this is the equivalent of a session for a given username.
-	err := state.secureCookie.SetPath(w, "user", username, state.cookieTime, "/", state.cookieSecret)
+	err := state.SetPath(w, "user", username, "/")
 	if err != nil {
 		return err
 	}
@@ -127,30 +122,10 @@ func (state *UserState) SetUsernameIntoCookie(w http.ResponseWriter, username st
 	return nil
 }
 
-// CookieTimeout returns the current login cookie timeout, in seconds.
-func (state *UserState) GetCookieTimeout(username string) int64 {
-	return state.cookieTime
-}
-
-// SetCookieTimeout sets how long a login cookie should last, in seconds.
-func (state *UserState) SetCookieTimeout(cookieTime int64) {
-	state.cookieTime = cookieTime
-}
-
-// CookieSecret returns the current cookie secret
-func (state *UserState) GetCookieSecret() string {
-	return state.cookieSecret
-}
-
-// SetCookieSecret sets the current cookie secret
-func (state *UserState) SetCookieSecret(cookieSecret string) {
-	state.cookieSecret = cookieSecret
-}
-
 // ClearCookie tries to clear the user cookie by setting it to be expired.
 // Some browsers *may* be configured to keep cookies even after this.
 func (state *UserState) ClearCookie(w http.ResponseWriter) {
-	state.secureCookie.Del(w, "user", "/")
+	state.Del(w, "user", "/")
 }
 
 // UserProperty identifies what filed we want to change from the User
@@ -183,12 +158,14 @@ func (state *UserState) GetUserStatus(id string, prop UserProperty) (result inte
 		result, err = user.ConfirmationCode, nil
 	case prop == Loggedin:
 		result, err = user.Loggedin, nil
+	case prop == Password:
+		result, err = user.Password, nil
 	case prop == Email:
 		result, err = user.Email, nil
 	case prop == Username:
 		result, err = user.Username, nil
 	default:
-		result, err = false, fmt.Errorf("Property is not gettable or defined\n")
+		result, err = false, errors.New("Property is not defined\n")
 	}
 
 	return
@@ -206,7 +183,10 @@ func (state *UserState) SetUserStatus(username string, prop UserProperty, val in
 	case prop == Email:
 		user.Email = val.(string)
 	case prop == Password:
-		user.Password, err = state.HashPassword(username, val.(string))
+		if err = IsPasswordAllowed(username, val.(string)); err != nil {
+			return err
+		}
+		user.Password, err = HashBcrypt(val.(string))
 		if err != nil {
 			return err
 		}
@@ -271,7 +251,26 @@ func (state *UserState) GetAllFiltered(what, filter, filterVal string) ([]string
 // AddUser creates a user and hashes the password, does not check for rights.
 // The given data must be valid.
 func (state *UserState) AddUser(user *backend.User) error {
-	err := state.users.Put(user.Email, user)
+	switch {
+	case user.Email == "":
+		return errors.New("Email field is required\n")
+	case user.Username == "":
+		return errors.New("Username field is required\n")
+	case user.Password == "":
+		return errors.New("Password field is required\n")
+	}
+
+	if err := IsPasswordAllowed(user.Username, user.Password); err != nil {
+		return err
+	}
+
+	hashed, err := HashBcrypt(user.Password)
+	if err != nil {
+		return err
+	}
+
+	user.Password = hashed
+	err = state.users.Put(user.Email, user)
 	if err != nil {
 		return err
 	}
@@ -294,7 +293,7 @@ func (state *UserState) IsCurrentUserAdmin(req *http.Request) bool {
 
 // Username is a convenience function for returning the current username
 // (from the browser cookie), or an empty string.
-func (state *UserState) GetCurrentUserUsername(req *http.Request) string {
+func (state *UserState) GetCurrentUserNickname(req *http.Request) string {
 	username, err := state.GetUsernameFromCookie(req)
 	if err != nil {
 		return ""
@@ -326,119 +325,62 @@ func (state *UserState) Logout(username string) {
 	_ = state.SetUserStatus(username, Loggedin, false)
 }
 
-// AlreadyHasConfirmationCode goes through all the confirmationCodes of all
-// the unconfirmed users and checks if this confirmationCode already is in use.
-func (state *UserState) AlreadyHasConfirmationCode(confirmationCode string) bool {
-	unconfirmedUsernames, err := state.GetAllFiltered("Users", "Confirmed =", "false")
-	if err != nil {
-		return false
-	}
-	for _, aUsername := range unconfirmedUsernames {
-		aConfirmationCode, err := state.GetUserStatus(aUsername, ConfirmationCode)
-		if err != nil {
-			// If the confirmation code can not be found, that's okay too
-			return false
-		}
-		if confirmationCode == aConfirmationCode.(string) {
-			// Found it
-			return true
-		}
-	}
-	return false
-}
-
-// FindUserByConfirmationCode tries to find the corresponding username,
+// GetUserByConfirmationCode tries to find the corresponding username,
 // given a unique confirmation code.
-func (state *UserState) FindUserByConfirmationCode(confirmationcode string) (string, error) {
-	unconfirmedUsernames, err := state.GetAllFiltered("Username", "Confirmed = ", "false")
+func (state *UserState) GetUserByConfirmationCode(confirmationcode string) (string, error) {
+	users, err := state.GetAllFiltered("Username", "Confirmed = ", "false")
 	if err != nil {
 		return "", errors.New("All existing users are already confirmed.")
 	}
 
 	// Find the username by looking up the confirmationcode on unconfirmed users
-	username := ""
-	for _, aUsername := range unconfirmedUsernames {
-		aConfirmationCode, err := state.GetUserStatus(aUsername, ConfirmationCode)
+	var nickname = ""
+	for _, username := range users {
+		code, err := state.GetUserStatus(username, ConfirmationCode)
 		if err != nil {
 			// If the confirmation code can not be found, just skip this one
 			continue
 		}
-		if confirmationcode == aConfirmationCode.(string) {
+		if confirmationcode == code.(string) {
 			// Found the right user
-			username = aUsername
+			nickname = username
 			break
 		}
 	}
 
 	// Check that the user is there
-	if username == "" {
-		return username, errors.New("The confirmation code is no longer valid.")
-	}
-	hasUser := state.HasUser(username)
-	if !hasUser {
-		return username, errors.New("The user that is to be confirmed no longer exists.")
+	if nickname == "" {
+		return nickname, errors.New("The confirmation code is not valid.")
 	}
 
-	return username, nil
+	if ok := state.HasUser(nickname); !ok {
+		return nickname, errors.New("The user no longer exists.")
+	}
+
+	return nickname, nil
 }
 
-// GenerateUniqueConfirmationCode generates a unique confirmation code that
+// GenConfirmationCode generates an almost unique confirmation code that
 // can be used for confirming users.
-func (state *UserState) GenerateUniqueConfirmationCode() (string, error) {
-	const maxConfirmationCodeLength = 100 // when are the generated confirmation codes unreasonably long
-	length := minConfirmationCodeLength
-	confirmationCode := randomstring.GenReadable(length)
-	for state.AlreadyHasConfirmationCode(confirmationCode) {
-		// Increase the length of the confirmationCode random string every time there is a collision
-		length++
-		confirmationCode = randomstring.GenReadable(length)
-		if length > maxConfirmationCodeLength {
-			// This should never happen
-			return confirmationCode, errors.New("Too many generated confirmation codes are not unique!")
-		}
-	}
-	return confirmationCode, nil
+func (state *UserState) GenConfirmationCode() string {
+	return randomstring.GenReadable(64)
 }
 
-// PasswordHash returns the password hash for the given username.
-func (state *UserState) GetPasswordHash(username string) (string, error) {
-	user, err := state.users.Get(username)
-	if err != nil {
-		return "", err
-	}
-
-	return user.Password, nil
-}
-
-// HashPassword takes a password and creates a password hash.
-// It also takes a username, since some algorithms may use it for salt.
-func (state *UserState) HashPassword(username, password string) (string, error) {
-	var (
-		err  error
-		hash string
-	)
-
-	hash, err = hashBcrypt(password)
-	if err != nil {
-		return "", err
-	}
-
-	return hash, nil
-}
-
-// IsUserPassword checks if a password is correct. "username" is needed because
+// CheckUserPassword checks if a password is correct. "username" is needed because
 // it may be part of the hash for some password hashing algorithms.
-func (state *UserState) IsUserPassword(username, password string) bool {
+func (state *UserState) CheckUserPassword(username, password string) bool {
 
 	if !state.HasUser(username) {
 		return false
 	}
 
 	// Retrieve the stored password hash
-	hash, err := state.GetPasswordHash(username)
+	value, err := state.GetUserStatus(username, Password)
 	if err != nil {
 		return false
 	}
+
+	hash := value.(string)
 	if len(hash) == 0 {
 		return false
 	}
@@ -449,51 +391,4 @@ func (state *UserState) IsUserPassword(username, password string) bool {
 		return correctBcrypt(hash, password)
 	}
 	return false
-}
-
-// IsPasswordAllowed only checks if the given username and password are
-// different and if they only contain letters, numbers and/or underscore.
-// For checking if a given password is correct, use the `CorrectPassword`
-// function instead.
-func IsPasswordAllowed(username, password string) error {
-	const (
-		equal    = "Username and password can't be equal!\n"
-		distance = "Username and password can't contain same words!\n"
-		alnum    = "Password does not have numbers and letters.\n"
-		special  = "Password does not have one of the following:!@#$%^+&*~-_\n"
-		short    = "Password does not have 9 characters\n"
-	)
-	usern := strings.ToLower(username)
-	passw := strings.ToLower(password)
-	if usern == passw {
-		return fmt.Errorf(equal)
-	}
-
-	editd := randomstring.LevenshteinDistance(usern, passw)
-	if editd < len(password)-len(password)/4 {
-		return fmt.Errorf(distance)
-	}
-
-	if len(password) < 9 {
-		return fmt.Errorf(short)
-	}
-
-	rex := regexp.MustCompile(`[[:alnum:]]+`)
-	if !rex.Match([]byte(password)) {
-		return fmt.Errorf(alnum)
-	}
-
-	var (
-		ok         = false
-		characters = []string{"!#$%&*+-?@^_~"}
-	)
-
-	for i := 0; i < len(characters); i++ {
-		ok = strings.ContainsAny(password, characters[i])
-		if !ok && i == len(characters)-1 {
-			return fmt.Errorf(special)
-		}
-	}
-
-	return nil
 }

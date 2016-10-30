@@ -23,10 +23,22 @@ func TestAddUser(t *testing.T) {
 		Password:         "4321",
 	}
 	err := userstate.AddUser(u)
+	if err == nil {
+		t.Fatal(err)
+	}
+	u = &backend.User{
+		Name:             "carlo",
+		Email:            "carlo@mail.com",
+		Username:         "hunter1",
+		Admin:            false,
+		Confirmed:        false,
+		ConfirmationCode: "1345",
+		Password:         "4321Asfdg@",
+	}
+	err = userstate.AddUser(u)
 	if err != nil {
 		t.Fatal(err)
 	}
-
 }
 
 func TestSetUserStatus(t *testing.T) {
@@ -35,7 +47,7 @@ func TestSetUserStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = userstate.SetUserStatus("hunter1", Password, "4321")
+	err = userstate.SetUserStatus("hunter1", Password, "4321Asdg@")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,21 +142,9 @@ func TestGetAllFiltered(t *testing.T) {
 	}
 }
 
-func TestAlmostAllPasswordMethods(t *testing.T) {
-	_, err := userstate.GetPasswordHash("hunter1")
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestCheckUserPassword(t *testing.T) {
 
-	hash, err := userstate.HashPassword("carlo", "lkj125ttr")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(hash) < 8 {
-		t.Fatal("something went wrong while hashing")
-	}
-
-	ok := userstate.IsUserPassword("hunter1", "4321")
+	ok := userstate.CheckUserPassword("hunter1", "4321Asfdg@")
 	if !ok {
 		t.Fatal("User password should match")
 	}
