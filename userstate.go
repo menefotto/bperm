@@ -336,7 +336,7 @@ func (state *UserState) Logout(username string) error {
 func (state *UserState) GetUserByConfirmationCode(confirmationcode string) (string, error) {
 	users, err := state.GetAllFiltered("Username", "Confirmed = ", "false")
 	if err != nil {
-		return "", errors.New("All existing users are already confirmed.")
+		return "", err
 	}
 
 	// Find the username by looking up the confirmationcode on unconfirmed users

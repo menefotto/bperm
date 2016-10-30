@@ -18,7 +18,7 @@ func TestAddUser(t *testing.T) {
 	u := &backend.User{
 		Name:             "carlo",
 		Email:            "carlo@mail.com",
-		Username:         "hunter1",
+		Username:         "carlo@mail.com",
 		Admin:            false,
 		Confirmed:        false,
 		ConfirmationCode: "1345",
@@ -28,10 +28,11 @@ func TestAddUser(t *testing.T) {
 	if err == nil {
 		t.Fatal(err)
 	}
+
 	u = &backend.User{
 		Name:             "carlo",
 		Email:            "carlo@mail.com",
-		Username:         "hunter1",
+		Username:         "carlo@mail.com",
 		Admin:            false,
 		Confirmed:        false,
 		ConfirmationCode: "1345",
@@ -41,33 +42,10 @@ func TestAddUser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	u = &backend.User{
 		Name:             "carlo",
-		Username:         "hunter1",
-		Admin:            false,
-		Confirmed:        false,
-		ConfirmationCode: "1345",
-		Password:         "4321Asfdg@",
-	}
-	err = userstate.AddUser(u)
-	if err == nil {
-		t.Fatal(err)
-	}
-	u = &backend.User{
-		Name:             "carlo",
-		Email:            "carlo@mail.com",
-		Username:         "hunter1",
-		Admin:            false,
-		Confirmed:        false,
-		ConfirmationCode: "1345",
-	}
-	err = userstate.AddUser(u)
-	if err == nil {
-		t.Fatal(err)
-	}
-	u = &backend.User{
-		Name:             "carlo",
-		Email:            "carlo@mail.com",
+		Username:         "carlo@mail.com",
 		Admin:            false,
 		Confirmed:        false,
 		ConfirmationCode: "1345",
@@ -78,35 +56,60 @@ func TestAddUser(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	u = &backend.User{
+		Name:             "carlo",
+		Email:            "carlo@mail.com",
+		Username:         "carlo@mail.com",
+		Admin:            false,
+		Confirmed:        false,
+		ConfirmationCode: "1345",
+	}
+	err = userstate.AddUser(u)
+	if err == nil {
+		t.Fatal(err)
+	}
+
+	u = &backend.User{
+		Name:             "carlo",
+		Email:            "carlo@mail.com",
+		Admin:            false,
+		Confirmed:        false,
+		ConfirmationCode: "1345",
+		Password:         "4321Asfdg@",
+	}
+	err = userstate.AddUser(u)
+	if err == nil {
+		t.Fatal(err)
+	}
 }
 
 func TestSetUserStatus(t *testing.T) {
-	err := userstate.SetUserStatus("hunter1", Confirmed, true)
+	err := userstate.SetUserStatus("carlo@mail.com", Confirmed, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = userstate.SetUserStatus("hunter1", Password, "4321Asdg@")
+	err = userstate.SetUserStatus("carlo@mail.com", Password, "4321Asdg@")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = userstate.SetUserStatus("hunter1", Active, true)
+	err = userstate.SetUserStatus("carlo@mail.com", Active, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = userstate.SetUserStatus("hunter1", Admin, true)
+	err = userstate.SetUserStatus("carlo@mail.com", Admin, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = userstate.SetUserStatus("hunter1", Loggedin, true)
+	err = userstate.SetUserStatus("carlo@mail.com", Loggedin, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	u, err := userstate.GetUser("hunter1")
+	u, err := userstate.GetUser("carlo@mail.com")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +127,7 @@ func TestGetUserStatus(t *testing.T) {
 	}
 
 	for _, val := range boolprops {
-		res, err := userstate.GetUserStatus("hunter1", val)
+		res, err := userstate.GetUserStatus("carlo@mail.com", val)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -134,24 +137,24 @@ func TestGetUserStatus(t *testing.T) {
 		}
 	}
 
-	res, err := userstate.GetUserStatus("hunter1", Email)
+	res, err := userstate.GetUserStatus("carlo@mail.com", Email)
 	if err != nil {
 		t.Fatal(err)
 	}
 	email := res.(string)
-	if email != "bob@zombo.com" {
+	if email != "carlo@mail.com" {
 		t.Fatal("Should be true")
 	}
 
 }
 
 func TestGetHasUser(t *testing.T) {
-	has := userstate.HasUser("bob")
+	has := userstate.HasUser("carlo@mail.com")
 	if !has {
 		t.Fatal("should have user\n")
 	}
 
-	_, err := userstate.GetUser("bob")
+	_, err := userstate.GetUser("carlo@mail.com")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,44 +192,49 @@ func TestCheckUserPassword(t *testing.T) {
 }
 
 func TestIsPasswordAllowed(t *testing.T) {
-	err := IsPasswordAllowed("hunter1", "hunter1")
+	err := IsPasswordAllowed("carlo@mail.com", "carlo@mail.com")
 	if err == nil {
 		t.Fatal("Should have returned an error")
 	}
 
-	err = IsPasswordAllowed("hunter1", "hunter1carlo")
+	err = IsPasswordAllowed("carlo@mail.com", "carlo@mail.comcarlo")
 	if err == nil {
 		t.Fatal("Should have returned an error")
 	}
 
-	err = IsPasswordAllowed("hunter1", "1234")
+	err = IsPasswordAllowed("carlo@mail.com", "1234")
 	if err == nil {
 		t.Fatal("Should have returned an error")
 	}
 
-	err = IsPasswordAllowed("hunter1", "12344567890")
+	err = IsPasswordAllowed("carlo@mail.com", "12344567890")
 	if err == nil {
 		t.Fatal("Should have returned an error")
 	}
 
-	err = IsPasswordAllowed("hunter1", "12344567890adlj")
+	err = IsPasswordAllowed("carlo@mail.com", "12344567890adlj")
 	if err == nil {
 		t.Fatal("Should have returned an error")
 	}
 
-	err = IsPasswordAllowed("hunter1", "QWETT4567890adlj")
+	err = IsPasswordAllowed("carlo@mail.com", "QWETT4567890adlj")
 	if err == nil {
 		t.Fatal("Should have returned an error")
 	}
 
-	err = IsPasswordAllowed("hunter1", "QWETT456#7890adlj")
+	err = IsPasswordAllowed("carlo@mail.com", "QWETT456#7890adlj")
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestGetUserByCode(t *testing.T) {
-	_, err := userstate.GetUserByConfirmationCode("1345")
+	err := userstate.SetUserStatus("carlo@mail.com", Confirmed, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = userstate.GetUserByConfirmationCode("1345")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,14 +258,14 @@ func TestIsCurrentUserAdminFail(t *testing.T) {
 
 func TestLoginFail(t *testing.T) {
 	w := httptest.NewRecorder()
-	err := userstate.Login(w, "hunter1")
+	err := userstate.Login(w, "carlo@mail.com")
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestLogoutFail(t *testing.T) {
-	err := userstate.Logout("hunter1")
+	err := userstate.Logout("carlo@mail.com")
 	if err != nil {
 		t.Fatal(err)
 	}
