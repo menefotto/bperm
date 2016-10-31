@@ -1,17 +1,15 @@
 package bperm
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/bperm/backend"
 )
 
-var userstate, _ = NewUserStateSimple()
+var umng, _ = NewUserManager(DefaultProjectId)
 
-func TestNewUserStateDatabase(t *testing.T) {
-	_ = userstate.Database()
+func TestNewUserManagerBackend(t *testing.T) {
+	_ = umng.Backend()
 }
 
 func TestAddUser(t *testing.T) {
@@ -24,7 +22,7 @@ func TestAddUser(t *testing.T) {
 		ConfirmationCode: "1345",
 		Password:         "4321",
 	}
-	err := userstate.AddUser(u)
+	err := umng.AddUser(u)
 	if err == nil {
 		t.Fatal(err)
 	}
@@ -38,7 +36,7 @@ func TestAddUser(t *testing.T) {
 		ConfirmationCode: "1345",
 		Password:         "4321Asfdg@",
 	}
-	err = userstate.AddUser(u)
+	err = umng.AddUser(u)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +49,7 @@ func TestAddUser(t *testing.T) {
 		ConfirmationCode: "1345",
 		Password:         "4321Asfdg@",
 	}
-	err = userstate.AddUser(u)
+	err = umng.AddUser(u)
 	if err == nil {
 		t.Fatal(err)
 	}
@@ -64,7 +62,7 @@ func TestAddUser(t *testing.T) {
 		Confirmed:        false,
 		ConfirmationCode: "1345",
 	}
-	err = userstate.AddUser(u)
+	err = umng.AddUser(u)
 	if err == nil {
 		t.Fatal(err)
 	}
@@ -77,39 +75,39 @@ func TestAddUser(t *testing.T) {
 		ConfirmationCode: "1345",
 		Password:         "4321Asfdg@",
 	}
-	err = userstate.AddUser(u)
+	err = umng.AddUser(u)
 	if err == nil {
 		t.Fatal(err)
 	}
 }
 
 func TestSetUserStatus(t *testing.T) {
-	err := userstate.SetUserStatus("carlo@mail.com", Confirmed, true)
+	err := umng.SetUserStatus("carlo@mail.com", Confirmed, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = userstate.SetUserStatus("carlo@mail.com", Password, "4321Asdg@")
+	err = umng.SetUserStatus("carlo@mail.com", Password, "4321Asdg@")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = userstate.SetUserStatus("carlo@mail.com", Active, true)
+	err = umng.SetUserStatus("carlo@mail.com", Active, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = userstate.SetUserStatus("carlo@mail.com", Admin, true)
+	err = umng.SetUserStatus("carlo@mail.com", Admin, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = userstate.SetUserStatus("carlo@mail.com", Loggedin, true)
+	err = umng.SetUserStatus("carlo@mail.com", Loggedin, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	u, err := userstate.GetUser("carlo@mail.com")
+	u, err := umng.GetUser("carlo@mail.com")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +125,7 @@ func TestGetUserStatus(t *testing.T) {
 	}
 
 	for _, val := range boolprops {
-		res, err := userstate.GetUserStatus("carlo@mail.com", val)
+		res, err := umng.GetUserStatus("carlo@mail.com", val)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -137,7 +135,7 @@ func TestGetUserStatus(t *testing.T) {
 		}
 	}
 
-	res, err := userstate.GetUserStatus("carlo@mail.com", Email)
+	res, err := umng.GetUserStatus("carlo@mail.com", Email)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,12 +147,12 @@ func TestGetUserStatus(t *testing.T) {
 }
 
 func TestGetHasUser(t *testing.T) {
-	has := userstate.HasUser("carlo@mail.com")
+	has := umng.HasUser("carlo@mail.com")
 	if !has {
 		t.Fatal("should have user\n")
 	}
 
-	_, err := userstate.GetUser("carlo@mail.com")
+	_, err := umng.GetUser("carlo@mail.com")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +161,7 @@ func TestGetHasUser(t *testing.T) {
 
 // shitting with identity type error
 func TestGetAll(t *testing.T) {
-	usernames, err := userstate.GetAll("Username")
+	usernames, err := umng.GetAll("Username")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +172,7 @@ func TestGetAll(t *testing.T) {
 }
 
 func TestGetAllFiltered(t *testing.T) {
-	confirmed, err := userstate.GetAllFiltered("Name", "Confirmed =", "true")
+	confirmed, err := umng.GetAllFiltered("Name", "Confirmed =", "true")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +183,7 @@ func TestGetAllFiltered(t *testing.T) {
 }
 
 func TestCheckUserPassword(t *testing.T) {
-	ok := userstate.CheckUserPassword("carlo@mail.com", "14321Asfdg@")
+	ok := umng.CheckUserPassword("carlo@mail.com", "14321Asfdg@")
 	if !ok {
 		t.Fatal("User password should match")
 	}
@@ -228,50 +226,6 @@ func TestIsPasswordAllowed(t *testing.T) {
 	}
 }
 
-func TestGetUserByCode(t *testing.T) {
-	err := userstate.SetUserStatus("carlo@mail.com", Confirmed, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	_, err = userstate.GetUserByConfirmationCode("1345")
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestGetCurrentUserNicknameFail(t *testing.T) {
-	req := &http.Request{}
-	_, err := userstate.GetCurrentUserNickname(req)
-	if err == nil {
-		t.Fatal(err)
-	}
-}
-
-func TestIsCurrentUserAdminFail(t *testing.T) {
-	req := &http.Request{}
-	_, err := userstate.IsCurrentUserAdmin(req)
-	if err == nil {
-		t.Fatal(err)
-	}
-}
-
-func TestLoginFail(t *testing.T) {
-	w := httptest.NewRecorder()
-	err := userstate.Login(w, "carlo@mail.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestLogoutFail(t *testing.T) {
-	err := userstate.Logout("carlo@mail.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-}
-
 func TestClose(t *testing.T) {
-	userstate.Close()
+	umng.Close()
 }

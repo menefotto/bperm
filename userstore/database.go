@@ -1,4 +1,4 @@
-package backend
+package userstore
 
 type Db interface {
 	Open(projectId, kind string) error

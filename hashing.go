@@ -21,11 +21,14 @@ func correctBcrypt(hash string, password string) bool {
 	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
 }
 
+// Password validator func signature type
+type PasswordValidator func(username, password string) error // password validation func
+
 // IsPasswordAllowed only checks if the given username and password are
 // different and if they only contain letters, numbers and/or underscore.
 // For checking if a given password is correct, use the `CorrectPassword`
 // function instead.
-func IsPasswordAllowed(username, password string) error {
+func DefaultPasswordValidator(username, password string) error {
 	const (
 		equal    = "Username and password can't be equal!\n"
 		distance = "Username and password can't contain same words!\n"
